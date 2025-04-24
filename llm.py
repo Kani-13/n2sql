@@ -3,13 +3,16 @@ import logging
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-# Configure the Gemini API key
-genai.configure(api_key=os.getenv("AIzaSyDZC7iXbrVi62o7EAQIXbCa0R6C8gnT2-A"))
+# Configure the Gemini API key from the .env file
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+# Initialize the model correctly
+model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
 def nl_to_sql(nl_query: str) -> str:
     prompt = f""" 
@@ -24,4 +27,4 @@ def nl_to_sql(nl_query: str) -> str:
         return response.text.strip()
     except Exception as e:
         logger.error(f"Error generating SQL: {e}")
-        return None #llm.py
+        return None
