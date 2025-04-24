@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NL2SQL + Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        input, textarea, button {
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            font-size: 1rem;
+            width: 100%;
+        }
+        table {
+            border-collapse: collapse;
+            margin-top: 1rem;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.5rem;
+        }
+        canvas {
+            margin-top: 2rem;
+        }
+        .chart-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>NL2SQL with Visualization</h1>
+
+    <!-- Upload dataset -->
+    <h2>1. Upload Dataset</h2>
+    <input type="file" id="csvFile" accept=".csv" />
+    <button onclick="uploadDataset()">Upload</button>
+    <p id="uploadStatus"></p>
+
+    <!-- Ask question -->
+    <h2>2. Ask Your Question</h2>
+    <textarea id="question" rows="3" placeholder="e.g. Show me total sales by region"></textarea>
+    <button onclick="askQuestion()">Submit</button>
+
+    <!-- SQL & result -->
+    <h2>3. SQL & Result</h2>
+    <p><strong>Generated SQL:</strong> <span id="sqlQuery"></span></p>
+    <div id="resultContainer"></div>
+
+    <!-- Chart -->
+    <h2>4. Chart</h2>
+    <label>X-Axis:</label>
+    <select id="xField"></select>
+    <label>Y-Axis:</label>
+    <select id="yField"></select>
+    <button onclick="renderChart()">Render Chart</button>
+
+    <div class="chart-container">
+        <canvas id="resultChart" height="100"></canvas>
+    </div>
+
+    <script>
+        let dbName = "";
+        let lastResult = [];
+
+        async function uploadDataset() {
+            const fileInput = document.getElementById("csvFile");
+            if (!fileInput.files.length) return;
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            const res = await fetch("/upload-dataset", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+            if (data.db_name) {
+                dbName = data.db_name;
+                document.getElementById("uploadStatus").innerText = `Uploaded. DB Name: ${dbName}`;
+            } else {
+                document.getElementById("uploadStatus").innerText = "Upload failed.";
+            }
+        }
+
+        async function askQuestion() {
+            const question = document.getElementById("question").value;
+            const res = await fetch(`/generate-sql?db_name=${dbName}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question })
+            });
+
+            const data = await res.json();
+            document.getElementById("sqlQuery").innerText = data.generated_sql || "Error";
+
+            if (data.result) {
+                lastResult = data.result;
+                renderTable(data.result);
+                populateFieldSelectors(data.columns);
+            }
+        }
+
+        function renderTable(data) {
+            const container = document.getElementById("resultContainer");
+            container.innerHTML = "";
+
+            if (!data.length) {
+                container.innerText = "No results.";
+                return;
+            }
+
+            const table = document.createElement("table");
+            const thead = document.createElement("thead");
+            const tbody = document.createElement("tbody");
+
+            // Headers
+            const headers = Object.keys(data[0]);
+            thead.innerHTML = "<tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr>";
+
+            // Rows
+            data.forEach(row => {
+                const tr = document.createElement("tr");
+                headers.forEach(col => {
+                    tr.innerHTML += `<td>${row[col]}</td>`;
+                });
+                tbody.appendChild(tr);
+            });
+
+            table.appendChild(thead);
+            table.appendChild(tbody);
+            container.appendChild(table);
+        }
+
+        function populateFieldSelectors(columns) {
+            const xSel = document.getElementById("xField");
+            const ySel = document.getElementById("yField");
+            xSel.innerHTML = ySel.innerHTML = "";
+
+            columns.forEach(col => {
+                xSel.innerHTML += `<option value="${col}">${col}</option>`;
+                ySel.innerHTML += `<option value="${col}">${col}</option>`;
+            });
+        }
+
+        function renderChart() {
+            const xField = document.getElementById("xField").value;
+            const yField = document.getElementById("yField").value;
+
+            const labels = lastResult.map(row => row[xField]);
+            const values = lastResult.map(row => row[yField]);
+
+            const ctx = document.getElementById("resultChart").getContext("2d");
+
+            // Enhanced Chart with better labels, gridlines, and tooltip options
+            new Chart(ctx, {
+                type: "bar",  // Change to 'line' for line chart, 'pie' for pie chart
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${yField} vs ${xField}`,
+                        data: values,
+                        backgroundColor: "#3498db",
+                        borderColor: "#2980b9",
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: xField
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: yField
+                            },
+                            ticks: {
+                                beginAtZero: true
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            enabled: true,
+                            mode: 'index',
+                            intersect: false
+                        },
+                        legend: {
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
